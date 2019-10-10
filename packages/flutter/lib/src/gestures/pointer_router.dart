@@ -95,19 +95,22 @@ class PointerRouter {
   /// PointerRouter object.
   void route(PointerEvent event) {
     final LinkedHashMap<PointerRoute, Matrix4> routes = _routeMap[event.pointer];
-    final LinkedHashMap<PointerRoute, Matrix4> globalRoutes = LinkedHashMap<PointerRoute, Matrix4>.from(_globalRoutes);
+    final LinkedHashMap<PointerRoute, Matrix4> copiedGlobalRoutes = LinkedHashMap<PointerRoute, Matrix4>.from(_globalRoutes);
     if (routes != null) {
-      LinkedHashMap<PointerRoute, Matrix4>.from(routes).forEach((PointerRoute route, Matrix4 transform) {
-        if (routes.containsKey(route)) {
-          _dispatch(event, route, transform);
-        }
-      });
+      _dispatchEventToRoutes(event, routes, LinkedHashMap<PointerRoute, Matrix4>.from(routes));
     }
-    globalRoutes.forEach((PointerRoute route, Matrix4 transform) {
-      if (_globalRoutes.containsKey(route))
-        _dispatch(event, route, transform);
-    });
+    _dispatchEventToRoutes(event, _globalRoutes, copiedGlobalRoutes);
   }
+
+  void _dispatchEventToRoutes(
+    PointerEvent event,
+    LinkedHashMap<PointerRoute, Matrix4> referenceRoutes,
+    LinkedHashMap<PointerRoute, Matrix4> copiedRoutes,
+    ) => copiedRoutes.forEach((PointerRoute route, Matrix4 transform) {
+      if (referenceRoutes.containsKey(route)) {
+        _dispatch(event, route, transform);
+      }
+    });
 }
 
 /// Variant of [FlutterErrorDetails] with extra fields for the gestures
