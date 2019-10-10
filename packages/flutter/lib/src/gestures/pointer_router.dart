@@ -95,18 +95,18 @@ class PointerRouter {
   /// PointerRouter object.
   void route(PointerEvent event) {
     final LinkedHashMap<PointerRoute, Matrix4> routes = _routeMap[event.pointer];
-    final List<MapEntry<PointerRoute, Matrix4>> globalRoutes = List<MapEntry<PointerRoute, Matrix4>>.from(_globalRoutes.entries);
+    final LinkedHashMap<PointerRoute, Matrix4> globalRoutes = LinkedHashMap<PointerRoute, Matrix4>.from(_globalRoutes);
     if (routes != null) {
-      for (MapEntry<PointerRoute, Matrix4> entry in List<MapEntry<PointerRoute, Matrix4>>.from(routes.entries)) {
-        if (routes.containsKey(entry.key)) {
-          _dispatch(event, entry.key, entry.value);
+      LinkedHashMap<PointerRoute, Matrix4>.from(routes).forEach((PointerRoute route, Matrix4 transform) {
+        if (routes.containsKey(route)) {
+          _dispatch(event, route, transform);
         }
-      }
+      });
     }
-    for (MapEntry<PointerRoute, Matrix4> entry in globalRoutes) {
-      if (_globalRoutes.containsKey(entry.key))
-        _dispatch(event, entry.key, entry.value);
-    }
+    globalRoutes.forEach((PointerRoute route, Matrix4 transform) {
+      if (_globalRoutes.containsKey(route))
+        _dispatch(event, route, transform);
+    });
   }
 }
 
