@@ -14,8 +14,8 @@ typedef PointerRoute = void Function(PointerEvent event);
 
 /// A routing table for [PointerEvent] events.
 class PointerRouter {
-  final Map<int, LinkedHashSet<_RouteEntry>> _routeMap = <int, LinkedHashSet<_RouteEntry>>{};
-  final LinkedHashSet<_RouteEntry> _globalRoutes = LinkedHashSet<_RouteEntry>();
+  final Map<int, LinkedHashMap<PointerRoute, Matrix4>> _routeMap = <int, LinkedHashMap<PointerRoute, Matrix4>>{};
+  final LinkedHashMap<PointerRoute, Matrix4> _globalRoutes = LinkedHashMap<PointerRoute, Matrix4>();
 
   /// Adds a route to the routing table.
   ///
@@ -25,9 +25,9 @@ class PointerRouter {
   /// Routes added reentrantly within [PointerRouter.route] will take effect when
   /// routing the next event.
   void addRoute(int pointer, PointerRoute route, [Matrix4 transform]) {
-    final LinkedHashSet<_RouteEntry> routes = _routeMap.putIfAbsent(pointer, () => LinkedHashSet<_RouteEntry>());
-    assert(!routes.any(_RouteEntry.isRoutePredicate(route)));
-    routes.add(_RouteEntry(route: route, transform: transform));
+    final LinkedHashMap<PointerRoute, Matrix4> routes = _routeMap.putIfAbsent(pointer, () => LinkedHashMap<PointerRoute, Matrix4>());
+    assert(!routes.containsKey(route));
+    routes[route] = transform;
   }
 
   /// Removes a route from the routing table.
@@ -39,9 +39,9 @@ class PointerRouter {
   /// immediately.
   void removeRoute(int pointer, PointerRoute route) {
     assert(_routeMap.containsKey(pointer));
-    final LinkedHashSet<_RouteEntry> routes = _routeMap[pointer];
-    assert(routes.any(_RouteEntry.isRoutePredicate(route)));
-    routes.removeWhere(_RouteEntry.isRoutePredicate(route));
+    final LinkedHashMap<PointerRoute, Matrix4> routes = _routeMap[pointer];
+    assert(routes.containsKey(route));
+    routes.remove(route);
     if (routes.isEmpty)
       _routeMap.remove(pointer);
   }
@@ -53,8 +53,8 @@ class PointerRouter {
   /// Routes added reentrantly within [PointerRouter.route] will take effect when
   /// routing the next event.
   void addGlobalRoute(PointerRoute route, [Matrix4 transform]) {
-    assert(!_globalRoutes.any(_RouteEntry.isRoutePredicate(route)));
-    _globalRoutes.add(_RouteEntry(route: route, transform: transform));
+    assert(!_globalRoutes.containsKey(route));
+    _globalRoutes[route] = transform;
   }
 
   /// Removes a route from the global entry in the routing table.
@@ -65,14 +65,14 @@ class PointerRouter {
   /// Routes removed reentrantly within [PointerRouter.route] will take effect
   /// immediately.
   void removeGlobalRoute(PointerRoute route) {
-    assert(_globalRoutes.any(_RouteEntry.isRoutePredicate(route)));
-    _globalRoutes.removeWhere(_RouteEntry.isRoutePredicate(route));
+    assert(_globalRoutes.containsKey(route));
+    _globalRoutes.remove(route);
   }
 
-  void _dispatch(PointerEvent event, _RouteEntry entry) {
+  void _dispatch(PointerEvent event, PointerRoute route, Matrix4 transform) {
     try {
-      event = event.transformed(entry.transform);
-      entry.route(event);
+      event = event.transformed(transform);
+      route(event);
     } catch (exception, stack) {
       FlutterError.reportError(FlutterErrorDetailsForPointerRouter(
         exception: exception,
@@ -80,7 +80,7 @@ class PointerRouter {
         library: 'gesture library',
         context: ErrorDescription('while routing a pointer event'),
         router: this,
-        route: entry.route,
+        route: route,
         event: event,
         informationCollector: () sync* {
           yield DiagnosticsProperty<PointerEvent>('Event', event, style: DiagnosticsTreeStyle.errorProperty);
@@ -94,17 +94,18 @@ class PointerRouter {
   /// Routes are called in the order in which they were added to the
   /// PointerRouter object.
   void route(PointerEvent event) {
-    final LinkedHashSet<_RouteEntry> routes = _routeMap[event.pointer];
-    final List<_RouteEntry> globalRoutes = List<_RouteEntry>.from(_globalRoutes);
+    final LinkedHashMap<PointerRoute, Matrix4> routes = _routeMap[event.pointer];
+    final List<MapEntry<PointerRoute, Matrix4>> globalRoutes = List<MapEntry<PointerRoute, Matrix4>>.from(_globalRoutes.entries);
     if (routes != null) {
-      for (_RouteEntry entry in List<_RouteEntry>.from(routes)) {
-        if (routes.any(_RouteEntry.isRoutePredicate(entry.route)))
-          _dispatch(event, entry);
+      for (MapEntry<PointerRoute, Matrix4> entry in List<MapEntry<PointerRoute, Matrix4>>.from(routes.entries)) {
+        if (routes.containsKey(entry.key)) {
+          _dispatch(event, entry.key, entry.value);
+        }
       }
     }
-    for (_RouteEntry entry in globalRoutes) {
-      if (_globalRoutes.any(_RouteEntry.isRoutePredicate(entry.route)))
-        _dispatch(event, entry);
+    for (MapEntry<PointerRoute, Matrix4> entry in globalRoutes) {
+      if (_globalRoutes.containsKey(entry.key))
+        _dispatch(event, entry.key, entry.value);
     }
   }
 }
@@ -150,20 +151,4 @@ class FlutterErrorDetailsForPointerRouter extends FlutterErrorDetails {
 
   /// The pointer event that was being routed when the exception was raised.
   final PointerEvent event;
-}
-
-typedef _RouteEntryPredicate = bool Function(_RouteEntry entry);
-
-class _RouteEntry {
-  const _RouteEntry({
-    @required this.route,
-    @required this.transform,
-  });
-
-  final PointerRoute route;
-  final Matrix4 transform;
-
-  static _RouteEntryPredicate isRoutePredicate(PointerRoute route) {
-    return (_RouteEntry entry) => entry.route == route;
-  }
 }
